@@ -39,7 +39,6 @@ int runAppImage(const QString& pathToAppImage, unsigned long argc, char** argv) 
     // needs to be converted to std::string to be able to use c_str()
     // when using QString and then .toStdString().c_str(), the std::string instance will be an rvalue, and the
     // pointer returned by c_str() will be invalid
-    auto x = pathToAppImage.toStdString();
     auto fullPathToAppImage = QFileInfo(pathToAppImage).absoluteFilePath();
 
     auto type = appimage_get_type(fullPathToAppImage.toStdString().c_str(), false);
@@ -49,117 +48,36 @@ int runAppImage(const QString& pathToAppImage, unsigned long argc, char** argv) 
     }
 
     // first of all, chmod +x the AppImage registerFile
-    // not strictly necessary for AppImageLauncherFS, but if AppImageLauncher is going to be removed, the user will
     // be happy the registerFile is executable already
     if (!makeExecutable(fullPathToAppImage)) {
         displayError(QObject::tr("Could not make AppImage executable: %1").arg(fullPathToAppImage));
         return 1;
     }
 
-    // make sure to restart service in case AppImageLauncher has been updated
-//    if (!fsDaemonHasBeenRestartedSinceLastUpdate()) {
-//        auto rv = system("systemctl --user restart appimagelauncherfs 2>&1 1>/dev/null");
-//        if (rv != 0) {
-//            displayError(QObject::tr("Failed to register AppImage in AppImageLauncherFS: error while trying to restart appimagelauncherfs.service after update"));
-//            return 1;
-//        }
-//    }
-
-    // make sure appimagelauncherfs service is running
-    auto rv = system("systemctl --user enable appimagelauncherfs 2>&1 1>/dev/null");
-    rv += system("systemctl --user start appimagelauncherfs 2>&1 1>/dev/null");
-
-    if (rv != 0) {
-        displayError(QObject::tr("Failed to register AppImage in AppImageLauncherFS: error while trying to start appimagelauncherfs.service"));
-        return 1;
-    }
-
     // suppress desktop integration script etc.
     setenv("DESKTOPINTEGRATION", "AppImageLauncher", true);
 
-    // build path to AppImageLauncherFS endpoint
-    QString pathToFSEndpoint = "/run/user/" + QString::number(getuid()) + "/appimagelauncherfs/";
+    auto makeVectorBuffer = [](const std::string& str) {
+        std::vector<char> strBuffer(str.size() + 1, '\0');
+        strncpy(strBuffer.data(), str.c_str(), str.size());
+        return strBuffer;
+    };
 
-    // resolve path to virtual file in map
-    QString pathToVirtualAppImage;
+    // calculate buffer to bypass binary
+    std::string pathToBinfmtBypassLauncher = privateLibDirPath("binfmt-bypass").toStdString() + "/binfmt-bypass";
 
-    bool registrationWorked = false, pathResolvingWorked = false, openingMapFileWorked = false;
-
-    // try to fetch ID of registered AppImage up to 10 times, with increasing timeouts
-    for (useconds_t i = 1; i < 10; i++) {
-        usleep(i * 100000);
-
-        // register current AppImage
-        if (!registrationWorked){
-            QFile registerFile(pathToFSEndpoint + "/register");
-
-            if (registerFile.open(QIODevice::Append)) {
-                QTextStream stream(&registerFile);
-                stream << pathToAppImage << endl;
-            }
-
-            registrationWorked = true;
-
-            registerFile.close();
-        }
-
-        // reading line wise properly is [hard, impossible[ in Qt
-        // using good ol' C++
-        std::string mapFilePath = (pathToFSEndpoint + "/map").toStdString();
-
-        std::ifstream mapFile(mapFilePath);
-
-        if (!mapFile) {
-            openingMapFileWorked = false;
-            continue;
-        }
-
-        openingMapFileWorked = true;
-
-        std::string currentLine;
-        while (std::getline(mapFile, currentLine)) {
-            if (currentLine.find(pathToAppImage.toStdString()) != std::string::npos) {
-                auto virtualFileName = currentLine.substr(0, currentLine.find(" -> "));
-                pathToVirtualAppImage = pathToFSEndpoint + "/" + QString::fromStdString(virtualFileName);
-                break;
-            }
-        }
-
-        mapFile.close();
-
-        if (!pathToVirtualAppImage.isEmpty()) {
-            pathResolvingWorked = true;
-            break;
-        }
-    }
-
-    // error message handling
-    if (pathToVirtualAppImage.isEmpty()) {
-        QString errorMessage;
-
-        if (!registrationWorked) {
-            errorMessage = QObject::tr("Failed to register AppImage in AppImageLauncherFS: failed to register AppImage path %1").arg(pathToAppImage);
-        } else if (!openingMapFileWorked) {
-            errorMessage = QObject::tr("Failed to register AppImage in AppImageLauncherFS: could not open map file");
-        } else if (!pathResolvingWorked) {
-            errorMessage = QObject::tr("Failed to register AppImage in AppImageLauncherFS: could not find virtual file for AppImage");
-        } else {
-            // this should _never_ be reachable
-            errorMessage = QObject::tr("Failed to register AppImage in AppImageLauncherFS: unknown failure");
-        }
-
-        displayError(errorMessage);
-
-        return 1;
-    }
-
-    // need a char pointer instead of a const one, therefore can't use .c_str()
-    std::vector<char> argv0Buffer(pathToAppImage.toStdString().size() + 1, '\0');
-    strcpy(argv0Buffer.data(), pathToAppImage.toStdString().c_str());
-
+    // create new args array for exec()d process
     std::vector<char*> args;
 
-    args.push_back(argv0Buffer.data());
+    // first argument is the path to our launcher
+    auto pathToBinfmtBypassLauncherBuffer = makeVectorBuffer(pathToBinfmtBypassLauncher);
+    args.push_back(pathToBinfmtBypassLauncherBuffer.data());
+
+    // first argument is consumed by the bypass launcher
+    // the reason we launch the bypass launcher as a new process to save RAM (we have to launch the actual AppImage
+    // as a subprocess, and the launcher executable has a much lower memory footprint)
+    auto pathToAppImageBuffer = makeVectorBuffer(pathToAppImage.toStdString());
+    args.push_back(pathToAppImageBuffer.data());
 
     // copy arguments
     for (unsigned long i = 1; i < argc; i++) {
@@ -169,7 +87,7 @@ int runAppImage(const QString& pathToAppImage, unsigned long argc, char** argv) 
     // args need to be null terminated
     args.push_back(nullptr);
 
-    execv(pathToVirtualAppImage.toStdString().c_str(), args.data());
+    execv(pathToBinfmtBypassLauncher.c_str(), args.data());
 
     const auto& error = errno;
     std::cerr << QObject::tr("execv() failed: %1").arg(strerror(error)).toStdString() << std::endl;
@@ -302,7 +220,8 @@ int main(int argc, char** argv) {
     }
 
     // if the users wishes to disable AppImageLauncher, we just run the AppImage as-ish
-    if (getenv("APPIMAGELAUNCHER_DISABLE") != nullptr) {
+    // also we don't ever want to integrate symlinks (see #290 for more information)
+    if (getenv("APPIMAGELAUNCHER_DISABLE") != nullptr || QFileInfo(pathToAppImage).isSymLink()) {
         return runAppImage(pathToAppImage, appImageArgv.size(), appImageArgv.data());
     }
 
@@ -424,7 +343,38 @@ int main(int argc, char** argv) {
             return runAppImage(pathToAppImage, appImageArgv.size(), appImageArgv.data());
         };
 
-        if (!isInDirectory(pathToAppImage, integratedAppImagesDestination().path())) {
+        // assume we have to ask
+        // prove me wrong!
+        bool needToAskAboutMoving = true;
+
+        // okay, I'll try to prove you wrong
+        {
+            auto directoriesNotToAskAboutMovingFor = daemonDirectoriesToWatch(config);
+
+            // normally the main integration destination should be contained
+            // but bugs happen, and we want to be sure not to create a weird situation where you'd be asked about
+            // moving files into yet the directory you want to move them into
+            directoriesNotToAskAboutMovingFor.insert(integratedAppImagesDestination());
+
+            for (const auto& dir : directoriesNotToAskAboutMovingFor) {
+                if (isInDirectory(pathToAppImage, dir)) {
+                    needToAskAboutMoving = false;
+                    break;
+                }
+            }
+        }
+
+        // not so fast: even if it's not in the main integration directory, there's more viable locations where
+        // AppImages may reside just fine
+        if (needToAskAboutMoving) {
+            for (const auto& additionalLocation : additionalAppImagesLocations()) {
+                if (isInDirectory(pathToAppImage, additionalLocation)) {
+                    needToAskAboutMoving = false;
+                }
+            }
+        }
+
+        if (needToAskAboutMoving) {
             auto* messageBox = new QMessageBox(
                 QMessageBox::Warning,
                 QMessageBox::tr("Warning"),
@@ -445,7 +395,7 @@ int main(int argc, char** argv) {
             messageBox->setDefaultButton(QMessageBox::Yes);
             messageBox->show();
 
-             QApplication::exec();
+            QApplication::exec();
 
             // if the user selects No, then continue as if the AppImage would not be in this directory
             if (messageBox->clickedButton() == messageBox->button(QMessageBox::Yes)) {

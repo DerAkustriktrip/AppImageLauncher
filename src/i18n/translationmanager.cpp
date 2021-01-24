@@ -1,9 +1,14 @@
+// system headers
+#include <iostream>
+
 // library headers
+#include <QDebug>
 #include <QDir>
 #include <QLibraryInfo>
 #include <QString>
 
 // local headers
+#include <shared.h>
 #include "translationmanager.h"
 
 TranslationManager::TranslationManager(QCoreApplication& app) : app(app) {
@@ -47,8 +52,18 @@ QString TranslationManager::getTranslationDir() {
     // therefore the files are now generated within the build dir, and we guess the path based on the binary location
     auto translationDir = binaryDirPath + "/../../i18n/generated/l10n";
 
+    // when the application is installed, we need to look for the files in the private data directory
     if (!QDir(translationDir).exists()) {
-        translationDir = binaryDirPath + "/../share/appimagelauncher/l10n";
+        auto privateDataDir = pathToPrivateDataDirectory();
+        if (!privateDataDir.isEmpty()) {
+            translationDir = privateDataDir + "/l10n";
+        }
+    }
+
+    // give the user (and dev) some feedback whether the translations could actually be found or not
+    if (!QDir(translationDir).exists()) {
+        std::cerr << "[AppImageLauncher] Warning: "
+                  << "Translation directory could not be found, translations are likely not available" << std::endl;
     }
 
     return translationDir;

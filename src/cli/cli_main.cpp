@@ -1,3 +1,6 @@
+// system headers
+#include <sstream>
+
 // library headers
 #include <QCoreApplication>
 #include <QCommandLineParser>
@@ -16,11 +19,18 @@ int main(int argc, char** argv) {
 
     QCoreApplication app(argc, argv);
 
+    std::ostringstream version;
+    version << "version " << APPIMAGELAUNCHER_VERSION << " "
+            << "(git commit " << APPIMAGELAUNCHER_GIT_COMMIT << "), built on "
+            << APPIMAGELAUNCHER_BUILD_DATE;
+    QCoreApplication::setApplicationVersion(QString::fromStdString(version.str()));
+
     QCommandLineParser parser;
 
     parser.addPositionalArgument("<command>", "Command to run (see help for more information");
     parser.addPositionalArgument("[...]", "command-specific additional arguments");
     parser.addHelpOption();
+    parser.addVersionOption();
 
     parser.process(app);
 
@@ -30,7 +40,8 @@ int main(int argc, char** argv) {
         qerr() << parser.helpText().toStdString().c_str() << endl;
 
         qerr() << "Available commands:" << endl;
-        qerr() << "  integrate   Integrate AppImages passed as commandline arguments" << endl;
+        qerr() << "  integrate    Integrate AppImages passed as commandline arguments" << endl;
+        qerr() << "  unintegrate  Unintegrate AppImages passed as commandline arguments" << endl;
 
         return 2;
     }

@@ -18,3 +18,21 @@ if [ "$UPDATE_BINFMTS" != "" ]; then
 else
     (set -x; systemctl restart systemd-binfmt)
 fi
+
+update_notifier="/usr/share/update-notifier/notify-reboot-required"
+if [ -x "$update_notifier" ]; then
+    "$update_notifier"
+fi
+
+cat <<EOF
+#####################################################
+#                                                   #
+#  NOTE: you need to reboot your computer in order  #
+#  to complete the uninstallation                   #
+#                                                   #
+#  (If you see this message during an upgrade:      #
+#  don't worry, you do not have to take any         #
+#  action, no reboot required!)                     #
+#                                                   #
+#####################################################
+EOF

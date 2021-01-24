@@ -1,4 +1,9 @@
-# define private libraries install destionation
+# define private libraries install destination
+include(GNUInstallDirs)
+
+# debugging: libdir should be lib/<triplet>
+message(STATUS "CMAKE_INSTALL_LIBDIR: ${CMAKE_INSTALL_LIBDIR}")
+
 if(NOT IS_ABSOLUTE ${CMAKE_INSTALL_LIBDIR})
     set(_libdir ${CMAKE_INSTALL_LIBDIR})
 else()
@@ -28,7 +33,7 @@ set(_rpath "\$ORIGIN/${_rpath}")
 file(GLOB libappimage_files ${PROJECT_BINARY_DIR}/lib/libappimage/src/libappimage/libappimage.so*)
 file(GLOB libappimageupdate_files ${PROJECT_BINARY_DIR}/lib/AppImageUpdate/src/libappimageupdate.so*)
 file(GLOB libappimageupdate-qt_files ${PROJECT_BINARY_DIR}/lib/AppImageUpdate/src/qt-ui/libappimageupdate-qt.so*)
-message(STATUS  ${PROJECT_BINARY_DIR}/lib/libappimage/src/libappimage/libappimage.so*)
+
 foreach(i libappimage libappimageupdate libappimageupdate-qt)
     # prevent unnecessary messages
     if(NOT i STREQUAL libappimage OR NOT USE_SYSTEM_LIBAPPIMAGE)
@@ -44,35 +49,37 @@ foreach(i libappimage libappimageupdate libappimageupdate-qt)
     endif()
 endforeach()
 
-# TODO: find alternative to the following "workaround" (a pretty dirty hack, actually...)
-# bundle update-binfmts as a fallback for distros which don't have it installed
-find_program(UPDATE_BINFMTS
-    NAMES update-binfmts
-    PATHS /usr/sbin
-)
-
-if(NOT UPDATE_BINFMTS STREQUAL UPDATE_BINFMTS-NOTFOUND AND EXISTS ${UPDATE_BINFMTS})
-    message(STATUS "Found update-binfmts, bundling: ${UPDATE_BINFMTS}")
-    install(
-        FILES /usr/sbin/update-binfmts
-        PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
-        DESTINATION ${_private_libdir} COMPONENT APPIMAGELAUNCHER
+if(NOT BUILD_LITE)
+    # TODO: find alternative to the following "workaround" (a pretty dirty hack, actually...)
+    # bundle update-binfmts as a fallback for distros which don't have it installed
+    find_program(UPDATE_BINFMTS
+        NAMES update-binfmts
+        PATHS /usr/sbin
     )
-else()
-    message(WARNING "update-binfmts could not be found. Please install the binfmt-support package if you intend to build RPM packages.")
-endif()
 
-# binfmt.d config file -- used as a fallback, if update-binfmts is not available
-configure_file(
-    ${PROJECT_SOURCE_DIR}/resources/binfmt.d/appimage.conf.in
-    ${PROJECT_BINARY_DIR}/resources/binfmt.d/appimage.conf
-    @ONLY
-)
-# caution: don't use ${CMAKE_INSTALL_LIBDIR} here, it's really just lib/binfmt.d
-install(
-    FILES ${PROJECT_BINARY_DIR}/resources/binfmt.d/appimage.conf
-    DESTINATION lib/binfmt.d COMPONENT APPIMAGELAUNCHER
-)
+    if(NOT UPDATE_BINFMTS STREQUAL UPDATE_BINFMTS-NOTFOUND AND EXISTS ${UPDATE_BINFMTS})
+        message(STATUS "Found update-binfmts, bundling: ${UPDATE_BINFMTS}")
+        install(
+            FILES /usr/sbin/update-binfmts
+            PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
+            DESTINATION ${_private_libdir} COMPONENT APPIMAGELAUNCHER
+        )
+    else()
+        message(WARNING "update-binfmts could not be found. Please install the binfmt-support package if you intend to build RPM packages.")
+    endif()
+
+    # binfmt.d config file -- used as a fallback, if update-binfmts is not available
+    configure_file(
+        ${PROJECT_SOURCE_DIR}/resources/binfmt.d/appimage.conf.in
+        ${PROJECT_BINARY_DIR}/resources/binfmt.d/appimage.conf
+        @ONLY
+    )
+    # caution: don't use ${CMAKE_INSTALL_LIBDIR} here, it's really just lib/binfmt.d
+    install(
+        FILES ${PROJECT_BINARY_DIR}/resources/binfmt.d/appimage.conf
+        DESTINATION lib/binfmt.d COMPONENT APPIMAGELAUNCHER
+    )
+endif()
 
 # install systemd service configuration for appimagelauncherd
 configure_file(
@@ -84,16 +91,4 @@ configure_file(
 install(
     FILES ${PROJECT_BINARY_DIR}/resources/appimagelauncherd.service
     DESTINATION lib/systemd/user/ COMPONENT APPIMAGELAUNCHER
-)
-
-# install systemd service configuration for appimagelauncherfs
-configure_file(
-    ${PROJECT_SOURCE_DIR}/resources/appimagelauncherfs.service.in
-    ${PROJECT_BINARY_DIR}/resources/appimagelauncherfs.service
-    @ONLY
-)
-# caution: don't use ${CMAKE_INSTALL_LIBDIR} here, it's really just lib/systemd/user
-install(
-    FILES ${PROJECT_BINARY_DIR}/resources/appimagelauncherfs.service
-    DESTINATION lib/systemd/user/ COMPONENT APPIMAGELAUNCHERFS
 )

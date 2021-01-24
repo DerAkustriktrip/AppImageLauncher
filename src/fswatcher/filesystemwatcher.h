@@ -1,16 +1,23 @@
 // system includes
+#include <algorithm>
 #include <memory>
+#include <unordered_set>
 
 // library includes
+#include <QDir>
 #include <QObject>
+#include <QSet>
 #include <QString>
 #include <QThread>
+
+// local includes
+#include "types.h"
 
 #pragma once
 
 class FileSystemWatcherError : public std::runtime_error {
 public:
-    FileSystemWatcherError(const QString& message) : std::runtime_error(message.toStdString().c_str()) {};
+    explicit FileSystemWatcherError(const QString& message) : std::runtime_error(message.toStdString().c_str()) {};
 };
 
 class FileSystemWatcher : public QObject {
@@ -21,22 +28,22 @@ private:
     std::shared_ptr<PrivateData> d;
 
 public:
-    explicit FileSystemWatcher(const QString& path);
-    explicit FileSystemWatcher(const QStringList& paths);
+    explicit FileSystemWatcher(const QDir& directory);
+    explicit FileSystemWatcher(const QDirSet& paths);
     FileSystemWatcher();
 
-public:
+public slots:
     bool startWatching();
     bool stopWatching();
-
-public slots:
-    void readEventsForever();
+    void readEvents();
+    bool updateWatchedDirectories(QDirSet watchedDirectories);
 
 public:
-    QStringList directories();
+    QDirSet directories();
 
 signals:
-    void fileCreated(QString path);
-    void fileModified(QString path);
-    void fileDeleted(QString path);
+    void fileChanged(QString path);
+    void fileRemoved(QString path);
+    void newDirectoriesToWatch(QDirSet set);
+    void directoriesToWatchDisappeared(QDirSet set);
 };

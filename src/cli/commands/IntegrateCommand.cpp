@@ -24,11 +24,21 @@ namespace appimagelauncher {
                     // make path absolute
                     // that will just prevent mistakes in libappimage and shared etc.
                     // (stuff like TryExec keys etc. being set to paths relative to CWD when running the command , ...)
-                    path = QFileInfo(path).absolutePath();
+                    path = QFileInfo(path).absoluteFilePath();
                 }
 
                 for (const auto& pathToAppImage : arguments) {
                     qout() << "Processing " << pathToAppImage << endl;
+
+                    if (!QFileInfo(pathToAppImage).isFile()) {
+                        qerr() << "Warning: Not a file, skipping: " << pathToAppImage << endl;
+                        continue;
+                    }
+
+                    if (!isAppImage(pathToAppImage)) {
+                        qerr() << "Warning: Not an AppImage, skipping: " << pathToAppImage << endl;
+                        continue;
+                    }
 
                     if (hasAlreadyBeenIntegrated(pathToAppImage)) {
                         if (desktopFileHasBeenUpdatedSinceLastUpdate(pathToAppImage)) {
@@ -41,6 +51,12 @@ namespace appimagelauncher {
 
                     auto pathToIntegratedAppImage = buildPathToIntegratedAppImage(pathToAppImage);
 
+                    // make sure integration directory exists
+                    // (important for new installations)
+                    // pretty ugly, but well, one taketh what the Qt API giveth
+                    QDir().mkdir(integratedAppImagesDestination().path());
+
+                    // check if it's already in the right place
                     if (QFileInfo(pathToAppImage).absoluteFilePath() != QFileInfo(pathToIntegratedAppImage).absoluteFilePath()) {
                         qout() << "Moving AppImage to integration directory" << endl;
 
@@ -53,15 +69,14 @@ namespace appimagelauncher {
                             qerr() << "Cannot move AppImage to integration directory (permission problem?), attempting to copy instead" << endl;
 
                             if (!QFile(pathToAppImage).copy(pathToIntegratedAppImage)) {
-                                qerr() << "Failed to copy AppImage, giving up" << endl;
-                                continue;
+                                throw CliError("Failed to copy AppImage, giving up");
                             }
                         }
                     } else {
                         qout() << "AppImage already in integration directory" << endl;
                     }
 
-                    installDesktopFileAndIcons(pathToAppImage);
+                    installDesktopFileAndIcons(pathToIntegratedAppImage);
                 }
             }
         }

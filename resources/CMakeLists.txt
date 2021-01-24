@@ -1,10 +1,21 @@
 # install configs for resource files
 
+# we depend on GNUInstallDirs, so let's make sure it's been loaded
+include(GNUInstallDirs)
+
+# debugging: should be share
+message(STATUS "CMAKE_INSTALL_DATADIR: ${CMAKE_INSTALL_DATADIR}")
+
 install(
     DIRECTORY
-    ${CMAKE_CURRENT_SOURCE_DIR}/icons
     ${CMAKE_CURRENT_SOURCE_DIR}/mime
     DESTINATION ${CMAKE_INSTALL_DATADIR} COMPONENT APPIMAGELAUNCHER
+)
+
+install(
+    DIRECTORY
+    ${CMAKE_CURRENT_SOURCE_DIR}/icons/hicolor
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/ COMPONENT APPIMAGELAUNCHER
 )
 
 install(
@@ -12,6 +23,16 @@ install(
     ${CMAKE_CURRENT_SOURCE_DIR}/appimagelauncher.desktop
     ${CMAKE_CURRENT_SOURCE_DIR}/appimagelaunchersettings.desktop
     DESTINATION ${CMAKE_INSTALL_DATADIR}/applications COMPONENT APPIMAGELAUNCHER
+)
+
+install(
+    DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/fallback-icons
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/appimagelauncher COMPONENT APPIMAGELAUNCHER
+)
+# we also need to copy the files into the binary dir to make their path predictable relative to the binary's location
+file(
+    COPY "${CMAKE_CURRENT_SOURCE_DIR}/fallback-icons"
+    DESTINATION "${CMAKE_CURRENT_BINARY_DIR}"
 )
 
 set(INSTALL_MAINTAINER_SCRIPTS OFF CACHE BOOL "")
@@ -35,7 +56,7 @@ if (INSTALL_MAINTAINER_SCRIPTS)
 
     install(
         FILES ${install_maintainer_scripts_dir}/post-install ${install_maintainer_scripts_dir}/post-uninstall
-        DESTINATION ${CMAKE_INSTALL_LIBDIR}/appimagelauncher/maintainer-scripts
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/appimagelauncher/maintainer-scripts
     )
 endif()
 

@@ -1,6 +1,6 @@
-set(V_MAJOR 1)
+set(V_MAJOR 2)
 set(V_MINOR 2)
-set(V_PATCH 2)
+set(V_PATCH 0)
 set(V_SUFFIX "")
 
 set(APPIMAGELAUNCHER_VERSION ${V_MAJOR}.${V_MINOR}.${V_PATCH}${V_SUFFIX})
@@ -51,11 +51,11 @@ endif()
 message(STATUS "Git commit: ${APPIMAGELAUNCHER_GIT_COMMIT}")
 mark_as_advanced(FORCE APPIMAGELAUNCHER_GIT_COMMIT)
 
-# add build number based on Travis build number if possible
-if("$ENV{TRAVIS_BUILD_NUMBER}" STREQUAL "")
+# add build number based on GitHub actions build number if possible
+if("$ENV{GITHUB_RUN_NUMBER}" STREQUAL "")
     set(APPIMAGELAUNCHER_BUILD_NUMBER "<local dev build>")
 else()
-    set(APPIMAGELAUNCHER_BUILD_NUMBER "$ENV{TRAVIS_BUILD_NUMBER}")
+    set(APPIMAGELAUNCHER_BUILD_NUMBER "$ENV{GITHUB_RUN_NUMBER}")
 endif()
 
 # get current date
@@ -63,20 +63,6 @@ execute_process(
     COMMAND env LC_ALL=C date -u "+%Y-%m-%d %H:%M:%S %Z"
     OUTPUT_VARIABLE APPIMAGELAUNCHER_BUILD_DATE
     OUTPUT_STRIP_TRAILING_WHITESPACE
-)
-
-# get current date, short form
-execute_process(
-    COMMAND env LC_ALL=C git show -s --format=%ci ${APPIMAGELAUNCHER_GIT_COMMIT}
-    OUTPUT_VARIABLE APPIMAGELAUNCHER_GIT_COMMIT_DATE
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
-)
-execute_process(
-    COMMAND env LC_ALL=C date -u "+%Y%m%d" -d ${APPIMAGELAUNCHER_GIT_COMMIT_DATE}
-    OUTPUT_VARIABLE APPIMAGELAUNCHER_GIT_COMMIT_DATE_SHORT
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
 )
 
 add_definitions(-DAPPIMAGELAUNCHER_VERSION="${APPIMAGELAUNCHER_VERSION}")
